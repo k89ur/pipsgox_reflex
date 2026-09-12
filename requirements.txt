@@ -1,4 +1,4 @@
-streamlit>=1.46
+reflex>=0.7.0
 pandas>=2.0
 numpy>=1.26
 yfinance>=0.2.40
@@ -7,4 +7,3 @@ beautifulsoup4>=4.12
 cloudscraper>=1.2.71
 tvdatafeed-enhanced==2.2.1
 websocket-client>=1.8.0
-streamlit-cookies-controller==0.0.4

@@ -17,7 +17,6 @@ class VCPState(rx.State):
             self.status=f"Scan complete · {len(self.rows)} matches"
         except Exception as e:self.status=f"Scan failed: {e}"
 
-@rx.page
 def vcp_page():
     headers=["Symbol","Index","Industry","LTP","52W High","From 52W High %","52W Low","From 52W Low %","50DMA","Price vs 50DMA %","150DMA","200DMA"]
     return shell(rx.heading("VCP Type Scan",size="6"),rx.text("Trend · 52W position · 50DMA position",color="gray"),rx.hstack(rx.checkbox("Trend filter",value=VCPState.trend_filter),rx.text("Within 52W High %"),rx.number_input(value=VCPState.near_high,min=0,max=10),rx.button("▶ After Market Scan",on_click=VCPState.scan)),rx.text(VCPState.status),rx.cond(VCPState.rows.length()>0,table_from_rows(headers,VCPState.rows),rx.text("Run a VCP scan to see results.")),title="PIPSGOX")

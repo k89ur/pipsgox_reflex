@@ -1,33 +1,19 @@
-# NIFTY Index Relative Strength
+# PipsGoX Reflex
 
-Minimal Streamlit app that reproduces the supplied Pine Script's 28-index IBD-style RS calculation.
+Reflex conversion of the PipsGoX Streamlit scanner. The calculation/data engines are preserved; the application UI and interaction layer run on Reflex.
 
-## Calculation
+## Pages
+- Index RS
+- Stock RS + Technical
+- VCP Type Scan
+- Insights
 
-- Exact 28-index universe from the supplied script
-- NIFTY 50 benchmark
-- 63 trading bars: 40%
-- 126 trading bars: 20%
-- 189 trading bars: 20%
-- 252 trading bars: 20%
-- Relative performance = index return minus NIFTY 50 return
-- RS 1–99 = the supplied Pine percentile/ranking formula
-
-## Data
-
-The app uses NSE historical index data as the primary source rather than guessing Yahoo Finance ticker mappings. Missing NSE series are reported as unavailable; they are never replaced with another instrument.
-
-## Run in GitHub Codespaces
-
+## Run
 ```bash
 pip install -r requirements.txt
-streamlit run app.py --server.address 0.0.0.0 --server.port 8501
+reflex run --env prod
 ```
 
-Open forwarded port **8501**.
+Reflex frontend: port 3000. Backend: port 8000.
 
-The first page load automatically runs the scan. **Refresh RS** forces a fresh NSE download.
-
-## Important
-
-This is an IBD-style approximation based on the supplied Pine formula. It is not IBD's proprietary RS Rating.
+The scanner engines (`rs_engine.py`, `vcp_engine.py`, `index_rs_engine.py`, NSE/Screener data modules and F&O filtering) remain the backend/data layer. Streamlit is no longer required by the UI.

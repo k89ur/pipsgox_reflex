@@ -3,11 +3,11 @@ from __future__ import annotations
 import io
 from collections import Counter
 from datetime import datetime, timedelta
+from functools import lru_cache
 from zoneinfo import ZoneInfo
 
 import pandas as pd
 import requests
-import streamlit as st
 import yfinance as yf
 
 NSE_BHAVCOPY_URLS = (
@@ -121,7 +121,7 @@ def _fetch_nse_bhavcopy(
     raise RuntimeError(f"Unable to retrieve a recent NSE bhavcopy: {last_error}")
 
 
-@st.cache_data(show_spinner=False, persist="disk", max_entries=20)
+@lru_cache(maxsize=20)
 def _fetch_latest_nse_close_cached(
     max_lookback_days: int,
     require_today: bool,
@@ -340,103 +340,29 @@ def patch_snapshot(snapshot: dict, progress_callback=None) -> dict:
             progress_callback(1, 1, f"NSE latest close already applied · {snapshot['nse_data_date']}")
         return snapshot
 
-    if progress_callback:
-        progress_callback(0, 1, "Loading latest NSE bhavcopy")
-    if mode == "today":
-        nse_date, closes = fetch_latest_nse_close(require_today=True)
-    else:
-        nse_date, closes = fetch_latest_nse_close(max_lookback_days=10, require_today=False)
-
-    raw_recent = _download_raw_recent(list(data.keys()))
-    target = pd.Timestamp(nse_date)
+    require_today = mode == "today"
+    actual_date, latest_close = fetch_latest_nse_close(max_lookback_days=5, require_today=require_today)
     updated = 0
-    factor_count = 0
-    for symbol, frame in data.items():
-        nse_close = closes.get(symbol)
-        if nse_close is None or frame is None or frame.empty:
-            continue
-        raw = raw_recent.get(symbol)
-        adjusted_factor = None
-        if raw is not None and not raw.empty:
-            common = frame.index.intersection(raw.index)
-            common = common[common <= target]
-            if len(common):
-                ref_date = common[-1]
-                adjusted_close = pd.to_numeric(frame.loc[ref_date, "Close"], errors="coerce")
-                raw_close = pd.to_numeric(raw.loc[ref_date, "Close"], errors="coerce")
-                if pd.notna(adjusted_close) and pd.notna(raw_close) and float(raw_close) > 0:
-                    adjusted_factor = float(adjusted_close) / float(raw_close)
-                    factor_count += 1
-        scaled_close = float(nse_close) * adjusted_factor if adjusted_factor is not None else float(nse_close)
-        x = frame.copy()
-        if target in x.index:
-            x.loc[target, "Close"] = scaled_close
-        else:
-            row = {column: float("nan") for column in x.columns}
-            row["Close"] = scaled_close
-            x = pd.concat([x, pd.DataFrame([row], index=[target])])
-        x.index = pd.to_datetime(x.index, errors="coerce").tz_localize(None)
-        x = x[~x.index.isna()].sort_index()
-        x = x[~x.index.duplicated(keep="last")]
-        data[symbol] = x
-        updated += 1
+    total = len(data)
+    for index, (symbol, frame) in enumerate(data.items(), start=1):
+        close = latest_close.get(str(symbol).upper())
+        if close is not None and frame is not None and not frame.empty:
+            frame = frame.copy()
+            if "Close" in frame.columns:
+                last_date = pd.Timestamp(frame.index[-1]).date()
+                target_date = pd.Timestamp(actual_date).date()
+                if last_date < target_date:
+                    row = {column: None for column in frame.columns}
+                    row["Close"] = float(close)
+                    frame.loc[pd.Timestamp(actual_date)] = row
+                    frame = frame.sort_index()
+                    data[symbol] = frame
+                    updated += 1
+        if progress_callback:
+            progress_callback(index, total, f"Applied NSE close · {symbol}")
 
-    snapshot["data"] = data
-    snapshot["nse_data_date"] = nse_date
     snapshot["nse_source_mode"] = mode
-    snapshot["nse_close_symbols"] = updated
-    snapshot["nse_adjustment_factors"] = factor_count
-    snapshot["nse_source"] = "NSE official CM bhavcopy"
+    snapshot["nse_data_date"] = actual_date
+    snapshot["nse_close_updated"] = updated
     _refresh_snapshot_diagnostics(snapshot)
-    if progress_callback:
-        progress_callback(1, 1, f"NSE latest close applied · {updated:,} symbols")
     return snapshot
-
-
-@st.cache_data(show_spinner=False, persist="disk", max_entries=200)
-def _cached_engine_batch(
-    symbols_tuple: tuple[str, ...],
-    period: str,
-    threads: bool,
-    cache_day: str,
-    _download_fn,
-) -> dict[str, pd.DataFrame]:
-    result = _download_fn(list(symbols_tuple), retries=3, threads=threads, period=period)
-    if len(result) < len(symbols_tuple):
-        raise RuntimeError("Incomplete batch; do not cache partial market data")
-    return result
-
-
-def install_nse_latest_close(engine_module) -> None:
-    if getattr(engine_module, "_nse_latest_close_installed", False):
-        return
-
-    original_download_universe = engine_module._download_universe
-    original_download_batch = engine_module._download_batch
-    original_clear_cache = engine_module.clear_stock_data_cache
-
-    def cached_download_batch(symbols, retries=3, threads=True, period="2y"):
-        cache_day = datetime.now(IST).date().isoformat()
-        try:
-            return _cached_engine_batch(
-                tuple(symbols), period, threads, cache_day, original_download_batch
-            )
-        except RuntimeError:
-            return original_download_batch(symbols, retries=retries, threads=threads, period=period)
-
-    def wrapped_download_universe(*args, **kwargs):
-        engine_module._download_batch = cached_download_batch
-        try:
-            snapshot = original_download_universe(*args, **kwargs)
-        finally:
-            engine_module._download_batch = original_download_batch
-        return patch_snapshot(snapshot, kwargs.get("progress_callback"))
-
-    def clear_all_stock_data_cache():
-        original_clear_cache()
-        _cached_engine_batch.clear()
-        _fetch_latest_nse_close_cached.clear()
-
-    engine_module._download_universe = wrapped_download_universe
-    engine_module.clear_stock_data_cache = clear_all_stock_data_cache
-    engine_module._nse_latest_close_installed = True

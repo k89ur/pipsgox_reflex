@@ -18,8 +18,6 @@ class IndexState(rx.State):
             self.status = f"Scan failed: {e}"
         self.running = False
 
-@rx.page
-
 def index_page():
     headers = ["Rank", "INDEX", "RS 1-99", "Raw RS", "3M %", "6M %", "9M %", "12M %", "LTP", "Status"]
     return shell(

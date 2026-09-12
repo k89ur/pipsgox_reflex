@@ -1,10 +1,10 @@
 import reflex as rx
 
-def shell(title, subtitle=""):
+def shell(*children, title="PIPSGOX", subtitle=""):
     return rx.vstack(
-        rx.heading("PIPSGOX", size="7"),
-        rx.heading(title, size="6"),
-        rx.text(subtitle, color="gray"),
+        rx.heading(title, size="7"),
+        rx.cond(subtitle != "", rx.text(subtitle, color="gray"), rx.fragment()),
+        *children,
         spacing="4", width="100%", max_width="1400px", margin="auto", padding="24px"
     )
 

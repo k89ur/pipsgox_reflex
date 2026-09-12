@@ -9,8 +9,10 @@ def shell(*children, title="PIPSGOX", subtitle=""):
     )
 
 def table_from_rows(headers, rows):
+    def render_row(row):
+        return rx.table.row(*[rx.table.cell(row[h]) for h in headers])
     return rx.table.root(
         rx.table.header(rx.table.row(*[rx.table.column_header_cell(h) for h in headers])),
-        rx.table.body(*[rx.table.row(*[rx.table.cell(str(r.get(h, '—'))) for h in headers]) for r in rows]),
+        rx.table.body(rx.foreach(rows, render_row)),
         width="100%", variant="surface"
     )

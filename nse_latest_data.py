@@ -366,3 +366,26 @@ def patch_snapshot(snapshot: dict, progress_callback=None) -> dict:
     snapshot["nse_close_updated"] = updated
     _refresh_snapshot_diagnostics(snapshot)
     return snapshot
+
+
+def install_nse_latest_close(engine) -> None:
+    """Install the NSE-close patch into a scanner engine without any Streamlit dependency.
+
+    The existing scanner engines already own the market-data download process. This
+    adapter wraps that process and applies the latest NSE EOD close to the returned
+    snapshot. It is intentionally idempotent so Reflex imports can safely call it
+    more than once.
+    """
+    if getattr(engine, "_nse_latest_close_installed", False):
+        return
+
+    original_download_universe = engine._download_universe
+
+    def _download_universe_with_nse_close(*args, **kwargs):
+        snapshot = original_download_universe(*args, **kwargs)
+        progress_callback = kwargs.get("progress_callback")
+        return patch_snapshot(snapshot, progress_callback=progress_callback)
+
+    engine._download_universe = _download_universe_with_nse_close
+    engine._nse_latest_close_installed = True
+    engine._nse_latest_close_original = original_download_universe

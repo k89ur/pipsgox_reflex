@@ -22,19 +22,20 @@ class StockState(rx.State):
                 fno = filter_fno_results(df)
                 syms = set(fno["Symbol"].astype(str).str.upper()) if fno is not None and not fno.empty else set()
                 df = df.loc[~df["Symbol"].astype(str).str.upper().isin(syms)]
-            except Exception: pass
+            except Exception:
+                pass
             self.rows = df.where(pd.notna(df), None).to_dict("records")
             self.status = f"Scan complete · {len(self.rows)} matches"
-        except Exception as e: self.status = f"Scan failed: {e}"
+        except Exception as e:
+            self.status = f"Scan failed: {e}"
 
-@rx.page
 def stock_page():
     headers=["Symbol","Index","Industry","LTP","RS Rating","3M %","6M %","9M %","12M %","52W High","From 52W High %"]
     return shell(
-        rx.heading("Stock RS + Technical", size="6"),
-        rx.text("IBD-style RS ranking with configurable scan filters", color="gray"),
+        rx.heading("Stock RS + Technical",size="6"),
+        rx.text("IBD-style RS ranking with configurable scan filters",color="gray"),
         rx.hstack(rx.text("Minimum RS"),rx.number_input(value=StockState.min_rs,on_change=StockState.set_min_rs,min=50,max=99),rx.text("Near 52W high %"),rx.number_input(value=StockState.near_high,on_change=StockState.set_near_high,min=1,max=25),rx.text("Minimum price"),rx.number_input(value=StockState.min_price,on_change=StockState.set_min_price,min=1)),
-        rx.button("▶ After Market Scan", on_click=StockState.scan),
+        rx.button("▶ After Market Scan", on_click=StockState.scan, loading=False),
         rx.text(StockState.status),
         rx.cond(StockState.rows.length()>0,table_from_rows(headers,StockState.rows),rx.text("Run a scan to see results.")),
         title="PIPSGOX"
